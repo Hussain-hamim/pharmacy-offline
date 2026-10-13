@@ -6,7 +6,7 @@ import {
   type ReactNode,
   type InputHTMLAttributes,
 } from 'react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useReactTable, getCoreRowModel, flexRender, type ColumnDef } from '@tanstack/react-table';
 import {
   Search,
@@ -175,7 +175,9 @@ export function usePaged(entity: string, filters: Data = {}, enabled = true) {
     queryKey: ['list', entity, filters, cursor, direction],
     queryFn: () => api<Page>('list', { entity, ...filters, cursor, direction }),
     enabled,
-    placeholderData: keepPreviousData,
+    // Keep rows during pagination, but never render another module's row shape.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === entity ? previous : undefined,
   });
   return {
     ...query,

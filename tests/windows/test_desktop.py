@@ -32,6 +32,7 @@ class DesktopSmoke(unittest.TestCase):
         pathlib.Path('test-results').mkdir(exist_ok=True)
         self.driver.save_screenshot('test-results/windows-desktop.png')
         pathlib.Path('test-results/windows-desktop.html').write_text(self.driver.page_source,encoding='utf-8')
+        pathlib.Path('test-results/windows-url.txt').write_text(self.driver.current_url,encoding='utf-8')
     def button(self, text):
         return self.wait.until(EC.element_to_be_clickable((By.XPATH,f'//button[normalize-space()="{text}" or @aria-label="{text}"]')))
     def test_desktop_bill_draft_localization(self):
@@ -61,6 +62,7 @@ class DesktopSmoke(unittest.TestCase):
             Select(d.find_element(By.CSS_SELECTOR,'header select, .topbar select')).select_by_value(code)
             self.wait.until(lambda _: d.find_element(By.TAG_NAME,'html').get_attribute('dir') == ('ltr' if code=='en' else 'rtl'))
         for route in ['customers','suppliers','stock','payments','returns','expenses','reports','users','settings','backups','audit']:
+            print(f'Checking desktop route: {route}',flush=True)
             d.find_element(By.CSS_SELECTOR,f'a[href="#/{route}"]').click()
             self.wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR,'h1')))
             self.assertNotIn('Unable to display this screen',d.find_element(By.TAG_NAME,'body').text)
