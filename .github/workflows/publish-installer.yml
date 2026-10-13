@@ -29,9 +29,10 @@ jobs:
           set -euo pipefail
           sha256sum --check SHA256SUMS.txt
           python3 - <<'PY'
-          import json, pathlib, subprocess
+          import json, os, pathlib, subprocess
           manifest = json.loads(pathlib.Path('installer-manifest.json').read_text(encoding='utf-8-sig'))
-          repo = json.loads(subprocess.check_output(['gh', 'repo', 'view', '--json', 'isPrivate'], text=True))
+          repository = os.environ['GH_REPO']
+          repo = json.loads(subprocess.check_output(['gh', 'repo', 'view', repository, '--json', 'isPrivate'], text=True))
           if not repo['isPrivate']:
               raise SystemExit('This workflow is intended only for the private pharmacy repository')
           if manifest['webview_install_mode'] != 'offlineInstaller':
@@ -46,6 +47,7 @@ jobs:
           pathlib.Path('release-notes.txt').write_text(notes)
           subprocess.run([
               'gh', 'release', 'create', f"v{manifest['version']}",
+              '--repo', repository,
               '--target', manifest['commit'], '--prerelease',
               '--title', f"Radefy Pharmacy {manifest['version']} — Windows offline installer",
               '--notes-file', 'release-notes.txt',
