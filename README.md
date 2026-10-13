@@ -76,7 +76,7 @@ The unsigned setup file is generated in `src-tauri/target/release/bundle/nsis/*-
 
 The private source repository is [Hussain-hamim/pharmacy-offline](https://github.com/Hussain-hamim/pharmacy-offline). The [Windows offline installer workflow](https://github.com/Hussain-hamim/pharmacy-offline/actions/workflows/windows.yml) runs checks, native desktop smoke tests, and the release build. It inspects the finished EXE to verify the full WebView2 payload is bundled, then uploads the installer, SHA-256 checksum and build manifest as the **Radefy-Pharmacy-Windows-x64-offline** artifact (retained for 30 days). Repository access is required to download it. Signing is not configured; a signing certificate is needed for a signed release.
 
-The first verified Windows build is [run 38449879538](https://github.com/Hussain-hamim/pharmacy-offline/actions/runs/38449879538). [Download its setup artifact](https://github.com/Hussain-hamim/pharmacy-offline/actions/runs/38449879538/artifacts/11840916479). It passed 11 frontend tests, 22 Rust tests and the native desktop smoke test; the installer contains the full offline WebView2 payload.
+The first verified Windows build is [run 38449879538](https://github.com/Hussain-hamim/pharmacy-offline/actions/runs/38449879538). **[Download the setup EXE from the private v0.1.0 release](https://github.com/Hussain-hamim/pharmacy-offline/releases/tag/v0.1.0)**; release assets persist beyond Actions artifact retention. It passed 11 frontend tests, 22 Rust tests and the native desktop smoke test; the installer contains the full offline WebView2 payload. GitHub names the release asset `Radefy.Pharmacy_0.1.0_x64-setup.exe`.
 
 To start another build from this checkout:
 

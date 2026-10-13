@@ -12,6 +12,7 @@ The Windows setup EXE has now been built successfully through GitHub Actions, an
 - Installer inspection found the complete `MicrosoftEdgeWebView2RuntimeInstaller.exe` payload (**214,090,448 bytes**) alongside the pharmacy executable. Configuration uses `offlineInstaller`.
 - EXE SHA-256: `01820c7cb14670b7a1fbfc4e0f92d65d0a6b850f67bfc12f47580f2942a5947c`.
 - [Download the private Actions artifact](https://github.com/Hussain-hamim/pharmacy-offline/actions/runs/38449879538/artifacts/11840916479); extract the ZIP before running the setup EXE. The artifact also includes its checksum and build manifest, and is retained for 30 days.
+- The same verified EXE is also saved in the [private v0.1.0 prerelease](https://github.com/Hussain-hamim/pharmacy-offline/releases/tag/v0.1.0), with the release filename `Radefy.Pharmacy_0.1.0_x64-setup.exe`. Release assets do not expire with Actions artifact retention; the EXE checksum is identical.
 
 CI uses Windows Server 2022 because newer runners encounter an [upstream WebView2 WebDriver startup regression](https://github.com/actions/runner-images/issues/14738). The test runtime was 131.0.2903.86; this runner choice does not pin or downgrade the offline installer bundled for clients. During CI verification, a cross-module table-cache error was found and fixed; two regression tests now cover it. Windows backup copies also use writable handles for durable flushing.
 

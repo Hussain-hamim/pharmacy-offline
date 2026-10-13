@@ -37,6 +37,13 @@ jobs:
               raise SystemExit('This workflow is intended only for the private pharmacy repository')
           if manifest['webview_install_mode'] != 'offlineInstaller':
               raise SystemExit('Artifact must contain the offline WebView2 installer')
+          # GitHub normalizes spaces in release asset names to periods.
+          original_name = manifest['installer']
+          manifest['installer'] = original_name.replace(' ', '.')
+          if manifest['installer'] != original_name:
+              pathlib.Path(original_name).rename(manifest['installer'])
+          pathlib.Path('installer-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          pathlib.Path('SHA256SUMS.txt').write_text(f"{manifest['sha256']}  {manifest['installer']}\n")
           notes = (
               'Windows 10/11 x64 setup with the full WebView2 offline installer bundled.\n\n'
               'Download the setup EXE and copy it to the client PC. Node.js, Rust and an internet connection are not required for installation.\n\n'
