@@ -74,7 +74,16 @@ npm run tauri build
 
 The unsigned setup file is generated in `src-tauri/target/release/bundle/nsis/*-setup.exe`. Configuration uses Tauri's `offlineInstaller` WebView2 mode: the WebView2 installer is bundled so client installation does not download it. Building the setup file requires network access to obtain that runtime initially. [Tauri packaging reference](https://v2.tauri.app/distribute/windows-installer/).
 
-`.github/workflows/windows.yml` contains the Windows build pipeline. Run it in a GitHub repository or use the commands above on Windows. This workspace has no configured Git remote, and no Windows CI run or Windows setup executable was produced here. Signing is not configured; a signing certificate is needed for a signed release.
+The private source repository is [Hussain-hamim/pharmacy-offline](https://github.com/Hussain-hamim/pharmacy-offline). The [Windows offline installer workflow](https://github.com/Hussain-hamim/pharmacy-offline/actions/workflows/windows.yml) runs checks, native desktop smoke tests, and the release build. It inspects the finished EXE to verify the full WebView2 payload is bundled, then uploads the installer, SHA-256 checksum and build manifest as the **Radefy-Pharmacy-Windows-x64-offline** artifact (retained for 30 days). Repository access is required to download it. Signing is not configured; a signing certificate is needed for a signed release.
+
+To start another build from this checkout:
+
+```sh
+gh workflow run windows.yml --ref main
+gh run list --workflow windows.yml --limit 5
+```
+
+Download the artifact from a successful run's page, or use `gh run download RUN_ID --name Radefy-Pharmacy-Windows-x64-offline --dir artifacts/windows-installer`. Extract the artifact ZIP before copying the setup EXE to a client's PC. The EXE itself includes WebView2; the client does not need Node, Rust or an internet connection. Compare its SHA-256 hash with `SHA256SUMS.txt` after copying it.
 
 Windows desktop smoke tests live in `tests/windows`. Build with `npm run tauri build -- --debug --no-bundle`, install Python `selenium`, `tauri-driver`, and the matching Microsoft Edge Driver, then run `./tests/windows/run.ps1`. The harness creates a fresh test database and exercises native sign-in, a bill/draft/post workflow, RTL switching and module navigation. See the [official driver prerequisites](https://v2.tauri.app/develop/tests/webdriver/manual-setup/).
 
