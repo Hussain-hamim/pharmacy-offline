@@ -1,0 +1,65 @@
+name: Windows offline installer
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
+      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install "selenium>=4.25,<5"
+      - run: cargo install tauri-driver --locked
+      - name: Install matching Edge WebDriver
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
+          "$PWD" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - run: npm run tauri build -- --debug --no-bundle
+      - name: Windows native smoke tests
+        shell: pwsh
+        timeout-minutes: 10
+        run: ./tests/windows/run.ps1
+      - name: Build Windows installer with offline WebView2
+        run: npm run tauri build
+      - name: Verify bundled WebView2 and record installer checksum
+        shell: pwsh
+        run: ./scripts/verify-windows-installer.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-verification
+          path: test-results/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Radefy-Pharmacy-Windows-x64-offline
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/SHA256SUMS.txt
+            src-tauri/target/release/bundle/nsis/installer-manifest.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
