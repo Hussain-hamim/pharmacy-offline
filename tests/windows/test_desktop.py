@@ -33,7 +33,7 @@ class DesktopSmoke(unittest.TestCase):
         self.driver.save_screenshot('test-results/windows-desktop.png')
         pathlib.Path('test-results/windows-desktop.html').write_text(self.driver.page_source,encoding='utf-8')
     def button(self, text):
-        return self.wait.until(EC.element_to_be_clickable((By.XPATH,f'//button[normalize-space()="{text}"]')))
+        return self.wait.until(EC.element_to_be_clickable((By.XPATH,f'//button[normalize-space()="{text}" or @aria-label="{text}"]')))
     def test_desktop_bill_draft_localization(self):
         d=self.driver
         user=self.wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR,'input[autocomplete="username"]')))
