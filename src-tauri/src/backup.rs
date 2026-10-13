@@ -133,7 +133,11 @@ fn copy_atomic(source: &Path, destination: &Path, expected: &str) -> Result<u64>
     fs::create_dir_all(parent)?;
     let partial = destination.with_extension("partial");
     let bytes = fs::copy(source, &partial)?;
-    fs::File::open(&partial)?.sync_all()?;
+    // FlushFileBuffers requires a writable handle on Windows.
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&partial)?
+        .sync_all()?;
     require(
         digest(&partial)? == expected,
         "Backup copy checksum mismatch",
@@ -339,6 +343,7 @@ pub fn restore(root: &Path, path: &Path, progress: &dyn Fn(Value)) -> Result<Val
         let mut f = fs::File::create(&stage)?;
         std::io::copy(&mut entry, &mut f)?;
         f.sync_all()?;
+        drop(f);
         require(
             digest(&stage)? == manifest["database_sha256"].as_str().unwrap_or(""),
             "Backup checksum verification failed",
@@ -482,6 +487,17 @@ mod backup_tests {
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 32);
         assert!(dir.join("manual-keep.pharmbackup").exists());
         assert!(dir.join("unrelated.txt").exists());
+    }
+    #[test]
+    fn verified_copy_is_durable_and_preserves_source() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.pharmbackup");
+        let destination = root.path().join("drive/copy.pharmbackup");
+        fs::write(&source, b"verified backup").unwrap();
+        let bytes = copy_atomic(&source, &destination, &digest(&source).unwrap()).unwrap();
+        assert_eq!(bytes, 15);
+        assert_eq!(fs::read(&destination).unwrap(), fs::read(&source).unwrap());
+        assert!(!destination.with_extension("partial").exists());
     }
     #[test]
     fn failed_destination_does_not_damage_source() {
