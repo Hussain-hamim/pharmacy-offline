@@ -7,7 +7,9 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: windows-latest
+    # The newer runner hits the upstream WebView2 WebDriver startup regression:
+    # https://github.com/actions/runner-images/issues/14738
+    runs-on: windows-2022
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
