@@ -1,13 +1,28 @@
 # Validation record — 2026-10-13
 
-This is a working implementation with local verification. **Windows release acceptance is not complete, and no Windows setup EXE has been produced in this Mac workspace.** The Windows workflow and native test harness are supplied but have not been run here.
+The Windows setup EXE has now been built successfully through GitHub Actions, and its embedded offline WebView2 payload has been verified. **Clean-client offline installation, upgrades, physical printers/drives and target-hardware performance still require the checks below.**
+
+## Verified Windows build
+
+- Private repository: [Hussain-hamim/pharmacy-offline](https://github.com/Hussain-hamim/pharmacy-offline).
+- Successful [Windows CI run](https://github.com/Hussain-hamim/pharmacy-offline/actions/runs/38449879538), source commit `4fdda7edada13f14bf6f17e0a35d5928b093a2a3`.
+- Passed: 11 frontend tests, 22 Rust integration tests, strict Clippy checks, production frontend build and the native Windows desktop smoke test.
+- The desktop test signed in, selected stock, saved/reopened a draft, posted a paid invoice, switched English/Dari/Pashto, and navigated the customer, supplier, stock, payment, return, expense, report, user, settings, backup and audit screens.
+- Installer: `Radefy Pharmacy_0.1.0_x64-setup.exe`, **220,746,137 bytes**, unsigned, Windows x64.
+- Installer inspection found the complete `MicrosoftEdgeWebView2RuntimeInstaller.exe` payload (**214,090,448 bytes**) alongside the pharmacy executable. Configuration uses `offlineInstaller`.
+- EXE SHA-256: `01820c7cb14670b7a1fbfc4e0f92d65d0a6b850f67bfc12f47580f2942a5947c`.
+- [Download the private Actions artifact](https://github.com/Hussain-hamim/pharmacy-offline/actions/runs/38449879538/artifacts/11840916479); extract the ZIP before running the setup EXE. The artifact also includes its checksum and build manifest, and is retained for 30 days.
+
+CI uses Windows Server 2022 because newer runners encounter an [upstream WebView2 WebDriver startup regression](https://github.com/actions/runner-images/issues/14738). The test runtime was 131.0.2903.86; this runner choice does not pin or downgrade the offline installer bundled for clients. During CI verification, a cross-module table-cache error was found and fixed; two regression tests now cover it. Windows backup copies also use writable handles for durable flushing.
+
+The CI desktop test runs against the debug application with an isolated synthetic database. The optimized release application and NSIS installer are built afterward. This is not a claim that a clean Windows 10/11 PC has already been tested with networking disabled.
 
 ## Completed on this Mac
 
 | Check | Evidence / result |
 |---|---|
 | TypeScript and production frontend | `npm run build` passed |
-| Frontend tests | 9 tests passed: decimal/percentage calculations, both calendars, Afghan month names, Persian digits, month-end expiry, draft debounce and serialized autosave/post lifecycle |
+| Frontend tests | 11 tests passed: decimal/percentage calculations, both calendars, Afghan month names, Persian digits, month-end expiry, draft debounce and serialized autosave/post lifecycle, and paginated module transitions |
 | Rust integration tests | 21 tests passed |
 | Rust lint | `cargo clippy --all-targets -- -D warnings` passed |
 | Native application | Debug Tauri binary and macOS `.app` compiled; native sign-in and database calls verified |
@@ -44,7 +59,7 @@ Debug build, macOS arm64. Fifty repetitions per read case, 25 ordinary single-li
 
 These are outstanding acceptance items, not claimed successes:
 
-1. Run `.github/workflows/windows.yml` or build on Windows x64. Run `tests/windows/run.ps1` with the matching Edge driver. Investigate any platform-specific failures before producing a client release.
+1. For future code changes, rerun `.github/workflows/windows.yml` and `tests/windows/run.ps1` with the matching Edge driver. The current source commit passed these checks as recorded above.
 2. Install the generated NSIS EXE on clean Windows 10/11 x64 with networking disabled and no preinstalled WebView2; confirm the bundled offline runtime installs, first setup works, and all ordinary work remains offline.
 3. Test an upgrade over populated data under the same Windows profile, then verify users, drafts, inventory, invoices and backups survive.
 4. Print long invoices using A4, an actual 80 mm printer and Windows PDF printing in all three languages. Confirm margins, repeated table headers, page breaks, RTL digits and mixed-direction product names. macOS `window.print()` did not open a dialog during testing; a native Tauri printing fallback was added and compiled, but its system dialog still needs verification.
