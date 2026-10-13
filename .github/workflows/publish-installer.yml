@@ -1,0 +1,54 @@
+name: Save verified installer as private release
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Windows installer workflow run
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Radefy-Pharmacy-Windows-x64-offline
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: installer
+      - name: Verify artifact and publish private prerelease
+        working-directory: installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          sha256sum --check SHA256SUMS.txt
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          manifest = json.loads(pathlib.Path('installer-manifest.json').read_text(encoding='utf-8-sig'))
+          repo = json.loads(subprocess.check_output(['gh', 'repo', 'view', '--json', 'isPrivate'], text=True))
+          if not repo['isPrivate']:
+              raise SystemExit('This workflow is intended only for the private pharmacy repository')
+          if manifest['webview_install_mode'] != 'offlineInstaller':
+              raise SystemExit('Artifact must contain the offline WebView2 installer')
+          notes = (
+              'Windows 10/11 x64 setup with the full WebView2 offline installer bundled.\n\n'
+              'Download the setup EXE and copy it to the client PC. Node.js, Rust and an internet connection are not required for installation.\n\n'
+              'Verified in Windows CI: 11 frontend tests, 22 Rust integration tests, strict Clippy, desktop invoice/draft/navigation smoke tests, and embedded WebView2 payload inspection.\n\n'
+              'This initial build is unsigned. Clean-PC offline installation, upgrade, printer and physical-drive acceptance remain manual checks before client rollout.\n\n'
+              f"Build: {manifest['run_url']}\nCommit: {manifest['commit']}\nSHA-256: `{manifest['sha256']}`\n"
+          )
+          pathlib.Path('release-notes.txt').write_text(notes)
+          subprocess.run([
+              'gh', 'release', 'create', f"v{manifest['version']}",
+              '--target', manifest['commit'], '--prerelease',
+              '--title', f"Radefy Pharmacy {manifest['version']} — Windows offline installer",
+              '--notes-file', 'release-notes.txt',
+              manifest['installer'], 'SHA256SUMS.txt', 'installer-manifest.json',
+          ], check=True)
+          PY
