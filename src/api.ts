@@ -12,6 +12,8 @@ export class ApiError extends Error {
     this.code = code;
   }
 }
+const previewUnavailable =
+  'The local preview server is unavailable. Start the backend and try again.';
 export async function api<T = Data>(action: Action, payload: Data = {}): Promise<T> {
   try {
     if (desktop) return await invoke<T>('request', { action, payload, token });
@@ -20,12 +22,24 @@ export async function api<T = Data>(action: Action, payload: Data = {}): Promise
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, payload, token }),
+      }).catch(() => {
+        throw new ApiError('CONNECTION', previewUnavailable);
+      });
+      const result = await response.json().catch(() => {
+        throw new ApiError(
+          'CONNECTION',
+          response.ok
+            ? 'The local preview server returned an invalid response. Restart it and try again.'
+            : previewUnavailable,
+        );
       });
       if (!response.ok) {
-        const e = await response.json();
-        throw e;
+        throw new ApiError(
+          typeof result?.code === 'string' ? result.code : 'CONNECTION',
+          typeof result?.message === 'string' ? result.message : previewUnavailable,
+        );
       }
-      return (await response.json()) as T;
+      return result as T;
     }
     throw new ApiError('DESKTOP', 'Open the installed desktop application');
   } catch (error) {

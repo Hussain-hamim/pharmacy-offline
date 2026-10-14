@@ -19,6 +19,7 @@ import {
   CalendarDays,
   Check,
   ArrowUpRight,
+  Plus,
 } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../context';
@@ -34,7 +35,7 @@ export function ErrorState({ error, retry }: { error: unknown; retry?: () => voi
       <strong>{t('Error')}</strong>
       <p>{t((error as Error)?.message || String(error))}</p>
       {retry ? (
-        <button className="button secondary" onClick={retry}>
+        <button type="button" className="button secondary" onClick={retry}>
           {t('Retry')}
         </button>
       ) : null}
@@ -497,6 +498,9 @@ export function Selector({
   filters = {},
   placeholder = 'Select…',
   renderExtra,
+  nullOption,
+  onCreate,
+  createLabel = 'New',
 }: {
   entity: string;
   value: number | null;
@@ -505,6 +509,9 @@ export function Selector({
   filters?: Data;
   placeholder?: string;
   renderExtra?: (row: Data) => ReactNode;
+  nullOption?: string;
+  onCreate?: (search: string) => void;
+  createLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -524,16 +531,31 @@ export function Selector({
     <div className="selector" ref={ref}>
       <button
         type="button"
-        className={`select-trigger ${value ? 'selected' : ''}`}
+        className={`select-trigger ${value || nullOption ? 'selected' : ''}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span>{value ? label || `#${value}` : t(placeholder)}</span>
+        <span>{value ? label || `#${value}` : t(nullOption || placeholder)}</span>
         <ChevronDown size={15} />
       </button>
       {open ? (
         <div className="select-popover">
           <SearchBox value={search} onChange={setSearch} />
+          {nullOption ? (
+            <div className="select-results">
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(null);
+                  setOpen(false);
+                  setSearch('');
+                }}
+              >
+                <strong>{t(nullOption)}</strong>
+                {value === null ? <Check size={16} /> : null}
+              </button>
+            </div>
+          ) : null}
           {result.isLoading ? (
             <div className="select-loading">
               <Spinner />
@@ -542,7 +564,7 @@ export function Selector({
             <ErrorState error={result.error} />
           ) : (
             <div className="select-results">
-              {value ? (
+              {value && !nullOption ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -579,6 +601,21 @@ export function Selector({
               ) : null}
             </div>
           )}
+          {onCreate ? (
+            <div className="select-results">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onCreate(search.trim());
+                  setSearch('');
+                }}
+              >
+                <strong>{t(createLabel)}</strong>
+                <Plus size={16} />
+              </button>
+            </div>
+          ) : null}
           <div className="select-paging">
             <button
               type="button"

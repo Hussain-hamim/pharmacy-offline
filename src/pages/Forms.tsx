@@ -21,14 +21,16 @@ export function RecordEditor({
   kind,
   id,
   existing,
+  initialValues,
   onClose,
   onSaved,
 }: {
   kind: string;
   id?: number;
   existing?: Data;
+  initialValues?: Data;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: (record: Data) => void;
 }) {
   const entity =
     kind === 'product'
@@ -53,7 +55,7 @@ export function RecordEditor({
     <EditorBody
       key={existing?.id || id || kind}
       kind={kind}
-      initial={existing?.payload || query.data}
+      initial={existing?.payload || query.data || initialValues}
       existing={existing}
       onClose={onClose}
       onSaved={onSaved}
@@ -88,6 +90,7 @@ function defaults(kind: string): Data {
         reorder_level: 10,
         active: true,
         units: [{ name: 'tablet', multiplier: 1, price: '0.00' }],
+        opening_stock: { quantity: 0, batch_number: '', expiry: '', total_cost: '0.00' },
       };
     case 'payment':
       return {
@@ -158,9 +161,9 @@ function EditorBody({
   initial?: Data;
   existing?: Data;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: (record: Data) => void;
 }) {
-  const { t, notify, language } = useApp();
+  const { t, notify, language, can } = useApp();
   const client = useQueryClient();
   const [form, setForm] = useState<Data>(() => {
     const value = { ...defaults(kind), ...initial };
@@ -200,7 +203,7 @@ function EditorBody({
                   : kind === 'user'
                     ? 'save_user'
                     : 'save_category';
-      await api(action, {
+      const result = await api(action, {
         ...form,
         permissions: kind === 'user' ? rolePermissions : undefined,
         request_id: `${draft.id}:submit`,
@@ -216,7 +219,7 @@ function EditorBody({
               ? 'Stock updated'
               : 'Saved',
       );
-      onSaved?.();
+      onSaved?.({ ...form, ...result });
       onClose();
     } catch (e) {
       draft.resume();
@@ -424,6 +427,62 @@ function EditorBody({
                 </button>
               </div>
             ))}
+            {!initial?.id && can('stock', true) ? (
+              <>
+                <div className="form-divider" />
+                <div className="form-section-title">{t('Opening stock')}</div>
+                <Field label="Opening stock" hint={`${t('Base unit')}: ${form.base_unit}`}>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="1000000000"
+                    step="1"
+                    value={form.opening_stock.quantity}
+                    onChange={(e) =>
+                      set('opening_stock', {
+                        ...form.opening_stock,
+                        quantity: Number(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+                {form.opening_stock.quantity > 0 ? (
+                  <div className="form-grid three">
+                    <Field label="Batch number" required>
+                      <Input
+                        value={form.opening_stock.batch_number}
+                        required
+                        onChange={(e) =>
+                          set('opening_stock', {
+                            ...form.opening_stock,
+                            batch_number: e.target.value,
+                          })
+                        }
+                      />
+                    </Field>
+                    <DateField
+                      label="Expiry date"
+                      expiry
+                      value={form.opening_stock.expiry}
+                      onChange={(expiry) => set('opening_stock', { ...form.opening_stock, expiry })}
+                    />
+                    <Field label="Total cost" hint="AFN" required>
+                      <Input
+                        inputMode="decimal"
+                        value={form.opening_stock.total_cost}
+                        required
+                        onChange={(e) =>
+                          set('opening_stock', {
+                            ...form.opening_stock,
+                            total_cost: e.target.value,
+                          })
+                        }
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
             <label className="check-label">
               <input
                 type="checkbox"

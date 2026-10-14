@@ -28,6 +28,7 @@ import {
   ErrorState,
 } from '../components/ui';
 import { usePrint, InvoiceModal } from './Print';
+import { RecordEditor } from './Forms';
 import type { Bill, BillLine, Product, Data } from '../types';
 export default function BillEditor({
   kind,
@@ -52,7 +53,7 @@ function BillBody({ kind, existing }: { kind: 'sale' | 'purchase'; existing?: Da
         date: today(),
         lines: [],
         discount: { kind: 'amount', value: '0' },
-        paid: '0',
+        paid: purchase ? '0' : '',
         method: 'Cash',
         note: '',
       },
@@ -61,6 +62,7 @@ function BillBody({ kind, existing }: { kind: 'sale' | 'purchase'; existing?: Da
   const [error, setError] = useState('');
   const [posted, setPosted] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
+  const [newCustomer, setNewCustomer] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const draft = useDraft(
     kind,
@@ -82,10 +84,22 @@ function BillBody({ kind, existing }: { kind: 'sale' | 'purchase'; existing?: Da
   );
   const invoiceDiscount = discount(subtotal - lineDiscounts, bill.discount);
   const total = subtotal - lineDiscounts - invoiceDiscount;
-  const paid = minor(bill.paid || '0');
-  const credit = Math.min(total, Math.max(0, -(bill.party_balance_minor || 0)));
+  const walkIn = !purchase && bill.party_id === null;
+  // A blank payment keeps a walk-in sale fully paid as lines and discounts change.
+  const payment = walkIn && bill.paid === '' ? amount(total) : bill.paid;
+  const paid = minor(payment || '0');
+  const credit = walkIn ? 0 : Math.min(total, Math.max(0, -(bill.party_balance_minor || 0)));
   const due = Math.max(0, total - credit - paid);
   const update = (key: keyof Bill, value: unknown) => setBill((b) => ({ ...b, [key]: value }));
+  function selectParty(row: Data | null) {
+    setBill((b) => ({
+      ...b,
+      party_id: row?.id ?? null,
+      party_name: row?.name || '',
+      party_balance_minor: row?.balance_minor || 0,
+      paid: !purchase && !row ? '' : b.paid || '0',
+    }));
+  }
   function updateLine(index: number, values: Partial<BillLine>) {
     setBill((b) => ({
       ...b,
@@ -130,6 +144,7 @@ function BillBody({ kind, existing }: { kind: 'sale' | 'purchase'; existing?: Da
       await draft.stop();
       const result = await api('post_bill', {
         ...bill,
+        paid: payment,
         request_id: `${draft.id}:post`,
         draft_id: draft.id,
       });
@@ -175,14 +190,10 @@ function BillBody({ kind, existing }: { kind: 'sale' | 'purchase'; existing?: Da
               value={bill.party_id}
               label={bill.party_name}
               placeholder={purchase ? 'Select supplier' : 'Walk-in customer'}
-              onChange={(r) =>
-                setBill((b) => ({
-                  ...b,
-                  party_id: r?.id || null,
-                  party_name: r?.name || '',
-                  party_balance_minor: r?.balance_minor || 0,
-                }))
-              }
+              nullOption={purchase ? undefined : 'Walk-in customer'}
+              onChange={selectParty}
+              createLabel="Add customer"
+              onCreate={!purchase && can('customers', true) ? setNewCustomer : undefined}
             />
           </Field>
           <DateField value={bill.date} onChange={(v) => update('date', v)} />
@@ -411,13 +422,13 @@ function BillBody({ kind, existing }: { kind: 'sale' | 'purchase'; existing?: Da
               <Field label="Amount paid">
                 <div className="input-action">
                   <Input
-                    value={bill.paid}
+                    value={payment}
                     inputMode="decimal"
                     onChange={(e) => update('paid', e.target.value)}
                   />
                   <button
                     aria-label={t('Paid')}
-                    onClick={() => update('paid', amount(total - credit))}
+                    onClick={() => update('paid', walkIn ? '' : amount(total - credit))}
                   >
                     <Check size={16} />
                   </button>
@@ -512,6 +523,14 @@ function BillBody({ kind, existing }: { kind: 'sale' | 'purchase'; existing?: Da
           </button>
         </div>
       </div>
+      {newCustomer !== null ? (
+        <RecordEditor
+          kind="customer"
+          initialValues={{ name: newCustomer }}
+          onClose={() => setNewCustomer(null)}
+          onSaved={selectParty}
+        />
+      ) : null}
       {posted ? (
         <InvoiceModal id={posted} onClose={() => navigate(purchase ? '/purchases' : '/sales')} />
       ) : null}

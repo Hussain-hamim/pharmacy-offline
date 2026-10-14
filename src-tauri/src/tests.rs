@@ -128,6 +128,184 @@ fn insufficient_stock_rolls_back_all_lines() {
     );
 }
 #[test]
+fn walk_in_sales_record_payment_and_stock_without_a_customer_account() {
+    let f = Fixture::new();
+    f.purchase(20, "2030-12-31", "10");
+    let mut payload = f.sale_payload(10, "200");
+    payload["party_id"] = Value::Null;
+    let sale = f.call("post_bill", payload.clone());
+    assert_eq!(f.call("post_bill", payload), sale);
+    assert_eq!(sale["outstanding_minor"], 0);
+    let doc = f.call("detail", json!({"entity":"document", "id":sale["id"]}));
+    assert!(doc["party_id"].is_null());
+    assert_eq!(doc["total_minor"], 17500);
+    assert_eq!(doc["paid_minor"], 17500);
+    assert_eq!(
+        doc["pharmacy_snapshot"]["document"]["party_name"],
+        "Walk-in customer"
+    );
+    assert_eq!(
+        f.call("detail", json!({"entity":"product", "id":f.product}))["on_hand"],
+        10
+    );
+    assert_eq!(
+        f.call("detail", json!({"entity":"party", "id":f.customer}))["balance_minor"],
+        0
+    );
+    let (receipts, account_entries): (i64, i64) = f.db().query_row(
+        "SELECT (SELECT SUM(amount_minor) FROM payments WHERE document_id=?), (SELECT COUNT(*) FROM account_movements WHERE document_id=?)",
+        rusqlite::params![sale["id"].as_i64().unwrap(), sale["id"].as_i64().unwrap()],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    ).unwrap();
+    assert_eq!(receipts, 17500);
+    assert_eq!(account_entries, 0);
+
+    let mut unpaid = f.sale_payload(1, "0");
+    unpaid["party_id"] = Value::Null;
+    assert_eq!(
+        f.try_call("post_bill", unpaid).unwrap_err().message,
+        "A customer is required for credit sales"
+    );
+    assert_eq!(
+        f.call("detail", json!({"entity":"product", "id":f.product}))["on_hand"],
+        10
+    );
+}
+
+fn opening_product_payload() -> Value {
+    json!({
+        "name":"Opening medicine", "base_unit":"tablet", "reorder_level":10,
+        "units":[{"name":"tablet", "multiplier":1, "price":"20"}, {"name":"box", "multiplier":10, "price":"180"}],
+        "opening_stock":{"quantity":25, "batch_number":"OPEN-1", "expiry":"2030-12-31", "total_cost":"125"},
+        "request_id":"opening-product"
+    })
+}
+
+#[test]
+fn new_product_opening_stock_is_atomic_idempotent_and_sellable() {
+    let f = Fixture::new();
+    let payload = opening_product_payload();
+    let created = f.call("save_product", payload.clone());
+    assert_eq!(created, f.call("save_product", payload.clone()));
+    let id = created["id"].as_i64().unwrap();
+    let product = f.call("detail", json!({"entity":"product", "id":id}));
+    assert_eq!(product["on_hand"], 25);
+    let (batches, qty, cost, movements): (i64, i64, i64, i64) = f.db().query_row(
+        "SELECT COUNT(*), SUM(quantity), SUM(cost_minor), (SELECT COUNT(*) FROM stock_movements WHERE product_id=?) FROM batches WHERE product_id=?",
+        [id, id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
+    ).unwrap();
+    assert_eq!((batches, qty, cost, movements), (1, 25, 12500, 1));
+    let box_unit = product["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["name"] == "box")
+        .unwrap();
+    let sale = f.call("post_bill", json!({
+        "kind":"sale", "party_id":null, "date":today(), "request_id":"opening-sale", "paid":"180",
+        "lines":[{"product_id":id, "unit_id":box_unit["id"], "quantity":1, "price":"180"}]
+    }));
+    let doc = f.call("detail", json!({"entity":"document", "id":sale["id"]}));
+    assert_eq!(doc["cost_minor"], 5000);
+    assert_eq!(
+        f.call("detail", json!({"entity":"product", "id":id}))["on_hand"],
+        15
+    );
+
+    let mut update = payload;
+    update["id"] = json!(id);
+    update["revision"] = product["revision"].clone();
+    update["request_id"] = json!("update-opening-product");
+    assert_eq!(
+        f.try_call("save_product", update.clone())
+            .unwrap_err()
+            .message,
+        "Opening stock can only be added when creating a product"
+    );
+    update.as_object_mut().unwrap().remove("opening_stock");
+    update["name"] = json!("Renamed medicine");
+    f.call("save_product", update);
+    assert_eq!(
+        f.call("detail", json!({"entity":"product", "id":id}))["on_hand"],
+        15
+    );
+}
+
+#[test]
+fn invalid_opening_stock_rolls_back_product_units_and_draft_completion() {
+    let f = Fixture::new();
+    f.call("save_draft", json!({"id":"opening-draft", "kind":"product", "title":"Opening medicine", "payload":opening_product_payload(), "revision":0}));
+    for stock in [
+        json!({"quantity":-1}),
+        json!({"quantity":1.5}),
+        json!({"quantity":1_000_000_001_i64}),
+        json!({"quantity":25,"batch_number":"","expiry":"2030-12-31","total_cost":"125"}),
+        json!({"quantity":25,"batch_number":"OPEN-1","expiry":"","total_cost":"125"}),
+        json!({"quantity":25,"batch_number":"OPEN-1","expiry":"2030-12-31","total_cost":"-1"}),
+    ] {
+        let mut payload = opening_product_payload();
+        payload["opening_stock"] = stock;
+        payload["draft_id"] = json!("opening-draft");
+        assert!(f.try_call("save_product", payload).is_err());
+        let counts: (i64, i64, i64) = f.db().query_row(
+            "SELECT (SELECT COUNT(*) FROM products), (SELECT COUNT(*) FROM product_units), (SELECT COUNT(*) FROM batches)",
+            [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)),
+        ).unwrap();
+        assert_eq!(counts, (1, 2, 0));
+        assert_eq!(
+            f.call("detail", json!({"entity":"draft","id":"opening-draft"}))["title"],
+            "Opening medicine"
+        );
+    }
+    let mut empty = opening_product_payload();
+    empty["opening_stock"] = json!({"quantity":0});
+    let created = f.call("save_product", empty);
+    assert_eq!(
+        f.call("detail", json!({"entity":"product","id":created["id"]}))["on_hand"],
+        0
+    );
+}
+
+#[test]
+fn opening_stock_requires_stock_write_permission() {
+    let f = Fixture::new();
+    let mut permissions = auth::preset("Custom");
+    permissions["products"] = json!("write");
+    permissions["stock"] = json!("read");
+    f.call("save_user", json!({"username":"catalog", "name":"Catalog", "password":"test-password", "role":"Custom", "permissions":permissions}));
+    let login = f
+        .core
+        .call(
+            "login",
+            json!({"username":"catalog", "password":"test-password"}),
+            None,
+            &|_| {},
+        )
+        .unwrap();
+    let err = f
+        .core
+        .call(
+            "save_product",
+            opening_product_payload(),
+            login["token"].as_str(),
+            &|_| {},
+        )
+        .unwrap_err();
+    assert_eq!(err.code, "PERMISSION");
+    assert_eq!(
+        f.db()
+            .query_row("SELECT COUNT(*) FROM products", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    let mut empty = opening_product_payload();
+    empty.as_object_mut().unwrap().remove("opening_stock");
+    assert!(f
+        .core
+        .call("save_product", empty, login["token"].as_str(), &|_| {})
+        .is_ok());
+}
+#[test]
 fn fefo_excludes_expired_and_quarantine() {
     let f = Fixture::new();
     f.purchase(20, "2032-01-01", "10");

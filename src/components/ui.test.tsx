@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 import type { ReactNode } from 'react';
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import { usePaged } from './ui';
+import { ErrorState, usePaged } from './ui';
 import type { Page } from '../types';
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -28,6 +36,19 @@ const salePage: Page = {
   previous_cursor: null,
   limit: 50,
 };
+
+it('retries an error without submitting its surrounding form', () => {
+  const retry = vi.fn();
+  const submit = vi.fn((event) => event.preventDefault());
+  render(
+    <form onSubmit={submit}>
+      <ErrorState error={new Error('Connection unavailable')} retry={retry} />
+    </form>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  expect(retry).toHaveBeenCalledOnce();
+  expect(submit).not.toHaveBeenCalled();
+});
 
 describe('paginated module navigation', () => {
   it('does not expose sale rows to customer columns while customers load', async () => {

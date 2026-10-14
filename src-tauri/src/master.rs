@@ -67,13 +67,26 @@ pub fn party(c: &Connection, a: &Actor, p: Value) -> Result<Value> {
         id
     };
     audit(c, a.id, "save", "parties", id, json!({"kind":p.kind}))?;
-    Ok(json!({"id":id}))
+    let balance: i64 = c.query_row("SELECT balance_minor FROM parties WHERE id=?", [id], |r| {
+        r.get(0)
+    })?;
+    Ok(json!({"id":id, "name":p.name.trim(), "balance_minor":balance}))
 }
 #[derive(Deserialize)]
 pub struct UnitInput {
     pub name: String,
     pub multiplier: i64,
     pub price: String,
+}
+#[derive(Deserialize)]
+pub struct OpeningStockInput {
+    pub quantity: i64,
+    #[serde(default)]
+    pub batch_number: String,
+    #[serde(default)]
+    pub expiry: String,
+    #[serde(default)]
+    pub total_cost: String,
 }
 #[derive(Deserialize)]
 pub struct ProductInput {
@@ -99,6 +112,7 @@ pub struct ProductInput {
     #[serde(default = "yes")]
     pub active: bool,
     pub units: Vec<UnitInput>,
+    pub opening_stock: Option<OpeningStockInput>,
 }
 pub fn product(c: &Connection, a: &Actor, p: Value) -> Result<Value> {
     auth::check(a, "products", true)?;
@@ -108,6 +122,16 @@ pub fn product(c: &Connection, a: &Actor, p: Value) -> Result<Value> {
         "Product name and base unit are required",
     )?;
     require(p.reorder_level >= 0, "Reorder level cannot be negative")?;
+    if let Some(stock) = &p.opening_stock {
+        require(
+            (0..=1_000_000_000).contains(&stock.quantity),
+            "Invalid base quantity",
+        )?;
+        require(
+            p.id.is_none() || stock.quantity == 0,
+            "Opening stock can only be added when creating a product",
+        )?;
+    }
     require(
         !p.units.is_empty() && p.units.iter().any(|u| u.multiplier == 1),
         "A base unit with multiplier 1 is required",
@@ -169,6 +193,21 @@ pub fn product(c: &Connection, a: &Actor, p: Value) -> Result<Value> {
         c.execute("INSERT INTO product_units(product_id,name,multiplier,price_minor) VALUES(?,?,?,?) ON CONFLICT(product_id,name) DO UPDATE SET price_minor=excluded.price_minor,multiplier=excluded.multiplier,active=1",params![id,u.name.trim(),u.multiplier,money(&u.price)?])?;
     }
     audit(c, a.id, "save", "products", id, json!({"name":p.name}))?;
+    if let Some(stock) = p.opening_stock.filter(|stock| stock.quantity > 0) {
+        adjustment(
+            c,
+            a,
+            json!({
+                "mode": "opening",
+                "product_id": id,
+                "quantity": stock.quantity,
+                "batch_number": stock.batch_number,
+                "expiry": stock.expiry,
+                "total_cost": if stock.total_cost.is_empty() { "0" } else { &stock.total_cost },
+                "reason": "Opening stock",
+            }),
+        )?;
+    }
     Ok(json!({"id":id}))
 }
 pub fn category(c: &Connection, a: &Actor, p: Value) -> Result<Value> {

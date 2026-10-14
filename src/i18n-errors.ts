@@ -1,4 +1,12 @@
 export const errorTranslations: Record<string, [string, string]> = {
+  'The local preview server is unavailable. Start the backend and try again.': [
+    'سرور محلی پیش‌نمایش در دسترس نیست. بخش پشتیبان را اجرا کرده و دوباره تلاش کنید.',
+    'د محلي مخکتنې سرور شتون نه لري. شاتنۍ برخه چالانه کړئ او بیا هڅه وکړئ.',
+  ],
+  'The local preview server returned an invalid response. Restart it and try again.': [
+    'سرور محلی پیش‌نمایش پاسخ نامعتبر داد. آن را دوباره اجرا کرده و تلاش کنید.',
+    'د محلي مخکتنې سرور ناسم ځواب ورکړ. بیا یې چالان کړئ او هڅه وکړئ.',
+  ],
   'This action requires additional permission': [
     'این عمل به صلاحیت اضافی نیاز دارد',
     'دا کار اضافي اجازې ته اړتیا لري',
@@ -105,6 +113,10 @@ export const errorTranslations: Record<string, [string, string]> = {
   'Reorder level cannot be negative': [
     'حد سفارش نمی‌تواند منفی باشد',
     'د بیا فرمایش حد منفي نه شي کېدای',
+  ],
+  'Opening stock can only be added when creating a product': [
+    'موجودی ابتدایی فقط هنگام ایجاد محصول اضافه می‌شود',
+    'لومړنۍ زېرمه یوازې د محصول جوړولو پر مهال زیاتېدای شي',
   ],
   'A base unit with multiplier 1 is required': [
     'واحد پایه با ضریب ۱ الزامی است',
